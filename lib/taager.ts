@@ -121,7 +121,8 @@ export function parseSheet(workbook: any, opts: ParseOptions): SKUResult[] {
     return d >= opts.analysisDayStart && d <= opts.analysisDayEnd
   })
 
-  const skuSet = new Set<string>()\n  analysisRows.forEach(r => {
+  const skuSet = new Set<string>()
+  analysisRows.forEach(r => {
     if (r.products) {
       r.products.split(",").map((s: string) => s.trim()).filter(Boolean).forEach((s: string) => skuSet.add(s))
     }
