@@ -74,7 +74,7 @@ export default function Dashboard() {
   const chartData = [...results]
     .sort((a, b) => b.ndr - a.ndr)
     .map(r => ({
-      sku: r.sku.replace(/^SA\d{6}/, ""),  // strip common SA prefix + 6 digits → unique suffix
+      sku: r.sku,  // show full SKU — label is rotated so it fits
       fullSku: r.sku,
       ndr: r.ndr,
       expectedNdr: r.expectedNdr,
@@ -222,18 +222,18 @@ export default function Dashboard() {
               </p>
               <div className="bg-surface border border-border rounded-2xl p-6 overflow-x-auto">
                 {/* 100px per SKU ensures all bars + labels fit, never clips */}
-                <div style={{ width: Math.max(720, chartData.length * 100), height: 300 }}>
+                <div style={{ width: Math.max(720, chartData.length * 110), height: 340 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData} barGap={4} barCategoryGap="28%" margin={{ bottom: 60, top: 10 }}>
+                    <BarChart data={chartData} barGap={4} barCategoryGap="28%" margin={{ bottom: 80, top: 10, left: 10, right: 20 }}>
                       <XAxis
                         dataKey="sku"
-                        tick={{ fill: "#9CA3AF", fontSize: 11, fontFamily: "monospace", fontWeight: 500 }}
+                        tick={{ fill: "#9CA3AF", fontSize: 10, fontFamily: "monospace", fontWeight: 500 }}
                         axisLine={false}
                         tickLine={false}
                         interval={0}
-                        angle={-40}
+                        angle={-55}
                         textAnchor="end"
-                        height={70}
+                        height={90}
                       />
                       <YAxis
                         tick={{ fill: "#6B7280", fontSize: 11 }}
