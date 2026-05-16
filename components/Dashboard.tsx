@@ -1,7 +1,7 @@
 "use client"
 import { useState, useCallback, useRef } from "react"
-import { Upload, FileSpreadsheet, Download, TrendingUp, Package, Truck, Globe } from "lucide-react"
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts"
+import { Upload, FileSpreadsheet, Download, TrendingUp, Package, Truck, Globe, Pencil } from "lucide-react"
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts"
 import type { SKUResult } from "@/lib/taager"
 import { translations, type Lang } from "@/lib/i18n"
 
@@ -12,10 +12,12 @@ export default function Dashboard() {
 
   const [results, setResults] = useState<SKUResult[]>([])
   const [spentValues, setSpentValues] = useState<Record<string, string>>({})
+  const [productNames, setProductNames] = useState<Record<string, string>>({})
   const [analysisDayEnd, setAnalysisDayEnd] = useState(9)
   const [closedCycleDayEnd, setClosedCycleDayEnd] = useState(5)
   const [loading, setLoading] = useState(false)
   const [fileName, setFileName] = useState("")
+  const [sheetOwnerName, setSheetOwnerName] = useState("")
   const [error, setError] = useState("")
   const fileRef = useRef<File | null>(null)
 
@@ -24,6 +26,9 @@ export default function Dashboard() {
     setError("")
     fileRef.current = file
     setFileName(file.name)
+    // Extract owner name from filename e.g. "taager-orders-abdelrahman.xlsx" -> "abdelrahman"
+    const baseName = file.name.replace(/\.[^/.]+$/, "")
+    setSheetOwnerName(baseName)
     try {
       const XLSX = await import("xlsx")
       const buffer = await file.arrayBuffer()
@@ -32,6 +37,10 @@ export default function Dashboard() {
       const { parseSheet } = await import("@/lib/taager")
       const data = parseSheet(wb, { analysisDayEnd, closedCycleDayEnd })
       setResults(data)
+      // Init product names to SKU by default
+      const names: Record<string, string> = {}
+      data.forEach(r => { names[r.sku] = r.sku })
+      setProductNames(names)
     } catch (e: any) {
       setError(t.parseError + e.message)
     }
@@ -55,13 +64,21 @@ export default function Dashboard() {
 
   const handleDownload = useCallback(async () => {
     const { exportToXlsx } = await import("@/lib/taager")
-    exportToXlsx(results, spentValues)
-  }, [results, spentValues])
+    exportToXlsx(results, spentValues, productNames, sheetOwnerName)
+  }, [results, spentValues, productNames, sheetOwnerName])
 
   const totalOrders = results.reduce((s, r) => s + r.totalOrders, 0)
   const totalDelivered = results.reduce((s, r) => s + r.delivered, 0)
   const avgNdr = results.length ? results.reduce((s, r) => s + r.ndr, 0) / results.length : 0
   const topSku = results[0]
+
+  // Chart: show ALL skus but truncate label for readability
+  const chartData = results.map(r => ({
+    sku: r.sku.length > 12 ? r.sku.slice(-8) : r.sku,
+    fullSku: r.sku,
+    ndr: r.ndr,
+    expectedNdr: r.expectedNdr,
+  }))
 
   return (
     <div className="min-h-screen bg-bg grid-noise" dir={t.dir}>
@@ -90,6 +107,8 @@ export default function Dashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-10 space-y-10">
+
+        {/* Upload */}
         <section className="fade-up fade-up-1">
           <h1 className="font-display text-3xl font-bold mb-2">{t.pageTitle}</h1>
           <p className="text-muted text-sm mb-6">{t.tagline}</p>
@@ -114,6 +133,20 @@ export default function Dashboard() {
             )}
           </div>
 
+          {/* Sheet owner name input */}
+          {results.length > 0 && (
+            <div className="flex items-center gap-2 mb-4">
+              <Pencil className="w-4 h-4 text-muted" />
+              <span className="text-muted text-sm">{t.sheetOwner}:</span>
+              <input
+                value={sheetOwnerName}
+                onChange={e => setSheetOwnerName(e.target.value)}
+                placeholder={t.sheetOwnerPlaceholder}
+                className="bg-surface border border-border focus:border-accent rounded-lg px-3 py-1.5 text-white text-sm outline-none transition-colors w-48"
+              />
+            </div>
+          )}
+
           <div onDrop={handleDrop} onDragOver={e => e.preventDefault()}
             className="relative border-2 border-dashed border-border hover:border-accent transition-colors rounded-2xl p-10 text-center cursor-pointer group"
             onClick={() => document.getElementById("fileInput")?.click()}>
@@ -133,6 +166,7 @@ export default function Dashboard() {
 
         {results.length > 0 && (
           <>
+            {/* Summary Cards */}
             <section className="fade-up fade-up-2">
               <h2 className="font-display text-xl font-semibold mb-4">{t.overview}</h2>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -143,15 +177,14 @@ export default function Dashboard() {
               </div>
             </section>
 
+            {/* Top SKU Highlight */}
             {topSku && (
               <section className="fade-up fade-up-2">
                 <div className="bg-surface border border-border rounded-2xl p-6 flex flex-wrap gap-6 items-center">
                   <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs bg-accent/20 text-accent px-2 py-0.5 rounded-full font-mono">{t.highestVolume}</span>
-                    </div>
-                    <p className="font-display text-2xl font-bold">{topSku.sku}</p>
-                    <p className="text-muted text-sm mt-1">{topSku.totalOrders} {t.orders}</p>
+                    <span className="text-xs bg-accent/20 text-accent px-2 py-0.5 rounded-full font-mono">{t.highestVolume}</span>
+                    <p className="font-display text-2xl font-bold mt-2">{topSku.sku}</p>
+                    <p className="text-muted text-sm">{topSku.totalOrders} {t.orders}</p>
                   </div>
                   <div className={`flex flex-wrap gap-6 text-sm ${isAr ? "flex-row-reverse" : ""}`}>
                     <Pill label={t.ndrLabel} value={`${topSku.ndr}%`} />
@@ -163,33 +196,36 @@ export default function Dashboard() {
               </section>
             )}
 
+            {/* NDR Chart — ALL SKUs, scrollable */}
             <section className="fade-up fade-up-3">
               <h2 className="font-display text-xl font-semibold mb-4">{t.chartTitle}</h2>
-              <div className="bg-surface border border-border rounded-2xl p-6">
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={results.slice(0, 10)} barGap={4} barCategoryGap="30%">
-                    <XAxis dataKey="sku" tick={{ fill: "#6B7280", fontSize: 11 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fill: "#6B7280", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `${v}%`} />
-                    <Tooltip
-                      contentStyle={{ background: "#12121A", border: "1px solid #1E1E2E", borderRadius: 8, fontSize: 12 }}
-                      labelStyle={{ color: "#E2E8F0", fontWeight: 600 }}
-                      formatter={(val: any, name: string) => [`${Number(val).toFixed(1)}%`, name]}
-                    />
-                    <Bar dataKey="ndr" name={t.currentNdr} fill="#F97316" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="expectedNdr" name={t.expectedNdrLegend} fill="#7C3AED" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-                <div className="flex gap-6 mt-3 justify-center">
-                  <LegendDot color="#F97316" label={t.currentNdr} />
-                  <LegendDot color="#7C3AED" label={t.expectedNdrLegend} />
+              <div className="bg-surface border border-border rounded-2xl p-6 overflow-x-auto">
+                <div style={{ minWidth: Math.max(600, chartData.length * 80) }}>
+                  <ResponsiveContainer width="100%" height={240}>
+                    <BarChart data={chartData} barGap={2} barCategoryGap="25%">
+                      <XAxis dataKey="sku" tick={{ fill: "#6B7280", fontSize: 10 }} axisLine={false} tickLine={false} interval={0} />
+                      <YAxis tick={{ fill: "#6B7280", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `${v}%`} />
+                      <Tooltip
+                        contentStyle={{ background: "#12121A", border: "1px solid #1E1E2E", borderRadius: 8, fontSize: 12 }}
+                        labelFormatter={(label, payload) => payload?.[0]?.payload?.fullSku || label}
+                        formatter={(val: any, name: string) => [`${Number(val).toFixed(1)}%`, name]}
+                      />
+                      <Legend />
+                      <Bar dataKey="ndr" name={t.currentNdr} fill="#F97316" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="expectedNdr" name={t.expectedNdrLegend} fill="#7C3AED" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
               </div>
             </section>
 
+            {/* Preview Table */}
             <section className="fade-up fade-up-4">
               <div className={`flex items-center justify-between mb-4 ${isAr ? "flex-row-reverse" : ""}`}>
                 <div>
-                  <h2 className="font-display text-xl font-semibold">{t.tableTitle}</h2>
+                  <h2 className="font-display text-xl font-semibold">
+                    {sheetOwnerName ? `${sheetOwnerName} — ${t.sheetPreview}` : t.tableTitle}
+                  </h2>
                   <p className="text-muted text-sm mt-1">
                     {t.tableSubtitle} <span className="text-accent font-medium">{t.tableSubtitleBold}</span> {t.tableSubtitleEnd}
                   </p>
@@ -204,7 +240,9 @@ export default function Dashboard() {
                 <table className="w-full text-sm" dir="ltr">
                   <thead>
                     <tr className="bg-surface border-b border-border">
-                      {[t.colSku, t.colTotalOrders, t.colPlacedNet, t.colConfirmed, t.colDelivered, t.colNdr, t.colExpNdr, t.colExpDvl, t.colCr, t.colAvgProfit, t.colSpent].map(h => (
+                      {[t.colSku, t.colProductName, t.colTotalOrders, t.colPlacedNet, t.colConfirmed,
+                        t.colDelivered, t.colNdr, t.colExpNdr, t.colExpDvl,
+                        t.colCr, t.colAvgProfit, t.colSpent].map(h => (
                         <th key={h} className="px-4 py-3 text-left text-muted font-medium whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
@@ -213,6 +251,14 @@ export default function Dashboard() {
                     {results.map((r, i) => (
                       <tr key={r.sku} className={`border-b border-border hover:bg-surface/50 transition-colors ${i % 2 === 0 ? "" : "bg-white/[0.01]"}`}>
                         <td className="px-4 py-3 font-mono text-xs text-accent whitespace-nowrap">{r.sku}</td>
+                        <td className="px-4 py-3">
+                          <input
+                            value={productNames[r.sku] || ""}
+                            onChange={e => setProductNames(prev => ({ ...prev, [r.sku]: e.target.value }))}
+                            placeholder={r.sku}
+                            className="w-36 bg-bg border border-border focus:border-accent/60 rounded-lg px-2 py-1 text-white text-xs outline-none transition-colors"
+                          />
+                        </td>
                         <td className="px-4 py-3 text-center font-medium">{r.totalOrders}</td>
                         <td className="px-4 py-3 text-center">{r.placedOrderNet}</td>
                         <td className="px-4 py-3 text-center">{r.confirmedOrders}</td>
@@ -262,15 +308,6 @@ function Pill({ label, value }: { label: string; value: any }) {
     <div>
       <p className="text-muted text-xs">{label}</p>
       <p className="text-white font-semibold">{value}</p>
-    </div>
-  )
-}
-
-function LegendDot({ color, label }: { color: string; label: string }) {
-  return (
-    <div className="flex items-center gap-2">
-      <div className="w-3 h-3 rounded-sm" style={{ background: color }} />
-      <span className="text-muted text-xs">{label}</span>
     </div>
   )
 }

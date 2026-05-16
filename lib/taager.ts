@@ -33,6 +33,12 @@ interface RawRow {
   tax: number
 }
 
+function safeNum(val: any): number {
+  if (val === null || val === undefined || val === "") return 0
+  const n = parseFloat(String(val).replace(/,/g, "."))
+  return isNaN(n) ? 0 : n
+}
+
 function dayOf(val: Date | string | number): number {
   if (val instanceof Date) return val.getDate()
   if (typeof val === "number") {
@@ -60,13 +66,19 @@ function calcSKU(rows: RawRow[], sku: string, allRows: RawRow[], closedCycleDayE
   const expectedDvlOrders = Math.round(placedOrderNet * (expectedNdr / 100))
   const crPercent = placedOrderNet > 0 ? (confirmedOrders / placedOrderNet) * 100 : 0
 
-  const sumProfit = main.reduce((s, r) => s + (Number(r.profit) || 0), 0)
-  const sumTax = main.reduce((s, r) => s + (Number(r.tax) || 0), 0)
+  // FIX: use safeNum to ensure numeric addition, not string concat
+  let sumProfit = 0
+  let sumTax = 0
+  for (const r of main) {
+    sumProfit += safeNum(r.profit)
+    sumTax += safeNum(r.tax)
+  }
+
   const avgProfit = totalOrders > 0 ? (sumProfit - sumTax) / totalOrders : 0
 
   return {
     sku,
-    productName: sku,
+    productName: sku, // Taager sheet has no product name column - use SKU; user can override
     totalOrders,
     placedOrderNet,
     confirmedOrders,
@@ -83,25 +95,20 @@ function calcSKU(rows: RawRow[], sku: string, allRows: RawRow[], closedCycleDayE
 }
 
 export function parseSheet(workbook: any, opts: ParseOptions): SKUResult[] {
-  // Dynamic import of xlsx happens in the browser — workbook already parsed
   const sheetName = workbook.SheetNames[0]
   const ws = workbook.Sheets[sheetName]
-
-  // We need XLSX utils — passed in via workbook reference won't work,
-  // so we use a simple manual JSON conversion approach
-  // workbook is already parsed by xlsx in the component
-  // Use utils from the same dynamic import
   const utils = (workbook as any).__utils
   if (!utils) throw new Error("XLSX utils not attached to workbook")
 
   const raw: any[] = utils.sheet_to_json(ws, { defval: "" })
 
   const rows: RawRow[] = raw.map((r: any) => ({
-    status: r["الحالة"] || "",
+    status: String(r["الحالة"] || ""),
     date: r["تاريخ الإنشاء"] || "",
-    products: r["المنتجات"] || "",
-    profit: Number(r["ربح الطلب"] || 0),
-    tax: Number(r["ربح الضريبة"] || 0),
+    products: String(r["المنتجات"] || ""),
+    // FIX: use safeNum here too, not Number()
+    profit: safeNum(r["ربح الطلب"]),
+    tax: safeNum(r["ربح الضريبة"]),
   }))
 
   const analysisRows = rows.filter(r => {
@@ -122,41 +129,61 @@ export function parseSheet(workbook: any, opts: ParseOptions): SKUResult[] {
     .sort((a, b) => b.totalOrders - a.totalOrders)
 }
 
-export function exportToXlsx(results: SKUResult[], spentValues: Record<string, string>) {
-  // xlsx is dynamically imported only in browser
+export function exportToXlsx(
+  results: SKUResult[],
+  spentValues: Record<string, string>,
+  productNames: Record<string, string>,
+  sheetOwnerName: string
+) {
   import("xlsx").then(XLSX => {
     const data = results.map(r => {
       const spent = parseFloat(spentValues[r.sku] || "0") || 0
-      const cpaUsd = r.placedOrderNet > 0 ? spent / r.placedOrderNet : 0
-      const expectedProfit = r.expectedDvlOrders * r.avgProfit
-      const expectedNetProfit = expectedProfit - spent
-      const profit = r.delivered * r.avgProfit
-      const netProfit = profit - spent
+      const cpa = r.placedOrderNet > 0 ? spent / r.placedOrderNet : ""
+      const breakevenCpa = +r.avgProfit.toFixed(2)
+      const expectedProfit = +(r.expectedDvlOrders * r.avgProfit).toFixed(2)
+      const expectedNetProfit = +(expectedProfit - spent).toFixed(2)
+      const profit = +(r.delivered * r.avgProfit).toFixed(2)
+      const netProfit = +(profit - spent).toFixed(2)
+      const name = productNames[r.sku] || r.sku
 
       return {
-        "SKU": r.sku,
-        "Total Orders": r.totalOrders,
-        "Placed Order Net": r.placedOrderNet,
-        "Confirmed Orders": r.confirmedOrders,
-        "تم التوصيل": r.delivered,
-        "NDR %": `${r.ndr}%`,
-        "Expected NDR %": `${r.expectedNdr}%`,
-        "Expected DVL Orders": r.expectedDvlOrders,
-        "CR %": `${r.crPercent}%`,
+        "sku": r.sku,
+        "product name": name,
+        "total order": r.totalOrders,
+        "Placed \nOrder net": r.placedOrderNet,
+        "Confirmed orders": r.confirmedOrders,
+        "Ndr to 10": +(r.ndr / 100).toFixed(4),
+        "Expected\nNDR to 5": +(r.expectedNdr / 100).toFixed(4),
+        "Net dvl": r.delivered,
+        "Expected\nDVL Orders": r.expectedDvlOrders,
+        "CR%": r.placedOrderNet > 0 ? +(r.confirmedOrders / r.placedOrderNet).toFixed(4) : 0,
         "AVG PROFIT": r.avgProfit,
-        "Total Ads Cost (USD)": spent || "",
-        "CPA (USD)": spent ? +cpaUsd.toFixed(2) : "",
-        "Expected Profit": +expectedProfit.toFixed(2),
-        "Expected Net Profit": +expectedNetProfit.toFixed(2),
-        "Profit": +profit.toFixed(2),
-        "Net Profit": +netProfit.toFixed(2),
+        "Total ads Cost \nUSD": spent || "",
+        "CPA\nUSD": spent ? +Number(cpa).toFixed(2) : "",
+        "Breakeven CPA\nUSD": breakevenCpa,
+        "Expected profit \nUSD": expectedProfit,
+        "Expected net profit \nUSD": expectedNetProfit,
+        "Pofit": profit,
+        "Net profit": netProfit,
       }
     })
 
     const ws = XLSX.utils.json_to_sheet(data)
     const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, "Dashboard")
-    ws["!cols"] = Array(16).fill({ wch: 16 })
-    XLSX.writeFile(wb, "abdelrahman_filled.xlsx")
+    XLSX.utils.book_append_sheet(wb, ws, "Sheet1")
+
+    // Column widths matching the template
+    ws["!cols"] = [
+      { wch: 18 }, { wch: 22 }, { wch: 12 }, { wch: 14 }, { wch: 16 },
+      { wch: 10 }, { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 8 },
+      { wch: 12 }, { wch: 16 }, { wch: 10 }, { wch: 16 }, { wch: 16 },
+      { wch: 20 }, { wch: 12 }, { wch: 12 },
+    ]
+
+    const fileName = sheetOwnerName
+      ? `${sheetOwnerName}_filled.xlsx`
+      : "sheet_filled.xlsx"
+
+    XLSX.writeFile(wb, fileName)
   })
 }
