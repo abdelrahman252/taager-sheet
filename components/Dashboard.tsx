@@ -70,13 +70,15 @@ export default function Dashboard() {
   const avgNdr = results.length ? results.reduce((s, r) => s + r.ndr, 0) / results.length : 0
   const topSku = results[0]
 
-  // Chart: ALL SKUs, short label = last 8 chars (unique suffix)
-  const chartData = results.map(r => ({
-    sku: r.sku.replace(/^SA\d+/, "").slice(0, 10) || r.sku.slice(-8),
-    fullSku: r.sku,
-    ndr: r.ndr,
-    expectedNdr: r.expectedNdr,
-  }))
+  // Chart: ALL SKUs sorted biggest NDR first, clean short label
+  const chartData = [...results]
+    .sort((a, b) => b.ndr - a.ndr)
+    .map(r => ({
+      sku: r.sku.replace(/^SA\d{6}/, ""),  // strip common SA prefix + 6 digits → unique suffix
+      fullSku: r.sku,
+      ndr: r.ndr,
+      expectedNdr: r.expectedNdr,
+    }))
 
   // Dynamic column headers with day ranges
   const colNdrDynamic = `NDR% 1–${analysisDayEnd}`
@@ -117,28 +119,24 @@ export default function Dashboard() {
 
           <div className={`flex flex-wrap gap-4 mb-4 ${isAr ? "flex-row-reverse" : ""}`}>
             {/* Analysis range pill */}
-            <div className="flex items-center gap-2 bg-surface border border-border rounded-lg px-4 py-2">
-              <div>
-                <p className="text-muted text-xs mb-0.5">{t.analysisRangeLabel}</p>
-                <div className="flex items-center gap-1">
-                  <span className="text-white text-sm font-mono">Days 1 –</span>
-                  <input type="number" min={1} max={31} value={analysisDayEnd}
-                    onChange={e => setAnalysisDayEnd(+e.target.value)}
-                    className="w-10 bg-transparent text-accent text-sm font-mono text-center outline-none border-b border-accent" />
-                </div>
+            <div className="bg-surface border border-border rounded-xl px-5 py-3">
+              <p style={{ fontSize: '1.2rem' }} className="text-muted font-medium mb-1">{t.analysisRangeLabel}</p>
+              <div className="flex items-center gap-2">
+                <span className="text-white font-mono text-base">Days 1 –</span>
+                <input type="number" min={1} max={31} value={analysisDayEnd}
+                  onChange={e => setAnalysisDayEnd(+e.target.value)}
+                  className="w-12 bg-transparent text-accent text-base font-mono text-center outline-none border-b-2 border-accent" />
               </div>
             </div>
 
             {/* Closed cycle pill */}
-            <div className="flex items-center gap-2 bg-surface border border-border rounded-lg px-4 py-2">
-              <div>
-                <p className="text-muted text-xs mb-0.5">{t.closedCycleLabel}</p>
-                <div className="flex items-center gap-1">
-                  <span className="text-white text-sm font-mono">{t.closedCyclePrefix}</span>
-                  <input type="number" min={1} max={31} value={closedCycleDayEnd}
-                    onChange={e => setClosedCycleDayEnd(+e.target.value)}
-                    className="w-10 bg-transparent text-purple-400 text-sm font-mono text-center outline-none border-b border-purple-400" />
-                </div>
+            <div className="bg-surface border border-border rounded-xl px-5 py-3">
+              <p style={{ fontSize: '1.2rem' }} className="text-muted font-medium mb-1">{t.closedCycleLabel}</p>
+              <div className="flex items-center gap-2">
+                <span className="text-white font-mono text-base">{t.closedCyclePrefix}</span>
+                <input type="number" min={1} max={31} value={closedCycleDayEnd}
+                  onChange={e => setClosedCycleDayEnd(+e.target.value)}
+                  className="w-12 bg-transparent text-purple-400 text-base font-mono text-center outline-none border-b-2 border-purple-400" />
               </div>
             </div>
 
@@ -212,38 +210,47 @@ export default function Dashboard() {
               </section>
             )}
 
-            {/* NDR Chart — fixed: wider per bar, no truncation */}
+            {/* NDR Chart — sorted desc, all SKUs visible */}
             <section className="fade-up fade-up-3">
               <h2 className="font-display text-xl font-semibold mb-1">{t.chartTitle}</h2>
-              <p className="text-muted text-xs mb-4">
-                {t.chartSubtitleOrange} <span className="text-accent font-medium">Days 1–{analysisDayEnd}</span>
-                {"  ·  "}
-                {t.chartSubtitlePurple} <span className="text-purple-400 font-medium">Days 1–{closedCycleDayEnd}</span>
+              <p className="text-muted text-sm mb-4">
+                <span className="inline-block w-3 h-3 rounded-sm bg-accent mr-1 align-middle" />
+                {t.chartSubtitleOrange} <span className="text-accent font-semibold">Days 1–{analysisDayEnd}</span>
+                <span className="mx-3 text-border">|</span>
+                <span className="inline-block w-3 h-3 rounded-sm bg-purple-500 mr-1 align-middle" />
+                {t.chartSubtitlePurple} <span className="text-purple-400 font-semibold">Days 1–{closedCycleDayEnd}</span>
               </p>
               <div className="bg-surface border border-border rounded-2xl p-6 overflow-x-auto">
-                {/* Each SKU gets 90px width minimum so none are cut off */}
-                <div style={{ width: Math.max(700, chartData.length * 90), height: 260 }}>
+                {/* 100px per SKU ensures all bars + labels fit, never clips */}
+                <div style={{ width: Math.max(720, chartData.length * 100), height: 300 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartData} barGap={3} barCategoryGap="30%">
+                    <BarChart data={chartData} barGap={4} barCategoryGap="28%" margin={{ bottom: 60, top: 10 }}>
                       <XAxis
                         dataKey="sku"
-                        tick={{ fill: "#6B7280", fontSize: 9, fontFamily: "monospace" }}
+                        tick={{ fill: "#9CA3AF", fontSize: 11, fontFamily: "monospace", fontWeight: 500 }}
                         axisLine={false}
                         tickLine={false}
                         interval={0}
-                        angle={-35}
+                        angle={-40}
                         textAnchor="end"
-                        height={55}
+                        height={70}
                       />
-                      <YAxis tick={{ fill: "#6B7280", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `${v}%`} />
+                      <YAxis
+                        tick={{ fill: "#6B7280", fontSize: 11 }}
+                        axisLine={false}
+                        tickLine={false}
+                        tickFormatter={v => `${v}%`}
+                        width={45}
+                      />
                       <Tooltip
-                        contentStyle={{ background: "#12121A", border: "1px solid #1E1E2E", borderRadius: 8, fontSize: 12 }}
+                        contentStyle={{ background: "#12121A", border: "1px solid #1E1E2E", borderRadius: 8, fontSize: 13 }}
                         labelFormatter={(_label: any, payload: any) => payload?.[0]?.payload?.fullSku || _label}
                         formatter={(val: any, name: string) => [`${Number(val).toFixed(1)}%`, name]}
+                        cursor={{ fill: "rgba(255,255,255,0.04)" }}
                       />
-                      <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
-                      <Bar dataKey="ndr" name={`NDR% 1–${analysisDayEnd}`} fill="#F97316" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="expectedNdr" name={`Exp.NDR% 1–${closedCycleDayEnd}`} fill="#7C3AED" radius={[4, 4, 0, 0]} />
+                      <Legend wrapperStyle={{ fontSize: 13, paddingTop: 12 }} />
+                      <Bar dataKey="ndr" name={`NDR% 1–${analysisDayEnd}`} fill="#F97316" radius={[5, 5, 0, 0]} minPointSize={2} />
+                      <Bar dataKey="expectedNdr" name={`Exp.NDR% 1–${closedCycleDayEnd}`} fill="#7C3AED" radius={[5, 5, 0, 0]} minPointSize={2} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
