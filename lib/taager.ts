@@ -63,22 +63,25 @@ function calcSKU(rows: RawRow[], sku: string, allRows: RawRow[], closedCycleDayE
   const closedPlaced = closed.filter(r => r.status !== STATUS.CANCELLED).length
   const closedDelivered = closed.filter(r => r.status === STATUS.DELIVERED).length
   const expectedNdr = closedPlaced > 0 ? (closedDelivered / closedPlaced) * 100 : 0
-  const expectedDvlOrders = Math.round(placedOrderNet * (expectedNdr / 100))
+
+  // Net DVL = NDR% * Placed Order Net
+  const netDvl = Math.round((ndr / 100) * placedOrderNet)
+  // Expected DVL Orders = Expected NDR% * Placed Order Net
+  const expectedDvlOrders = Math.round((expectedNdr / 100) * placedOrderNet)
+
   const crPercent = placedOrderNet > 0 ? (confirmedOrders / placedOrderNet) * 100 : 0
 
-  // FIX: use safeNum to ensure numeric addition, not string concat
   let sumProfit = 0
   let sumTax = 0
   for (const r of main) {
     sumProfit += safeNum(r.profit)
     sumTax += safeNum(r.tax)
   }
-
   const avgProfit = totalOrders > 0 ? (sumProfit - sumTax) / totalOrders : 0
 
   return {
     sku,
-    productName: sku, // Taager sheet has no product name column - use SKU; user can override
+    productName: sku,
     totalOrders,
     placedOrderNet,
     confirmedOrders,
@@ -86,7 +89,7 @@ function calcSKU(rows: RawRow[], sku: string, allRows: RawRow[], closedCycleDayE
     ndr: +ndr.toFixed(2),
     expectedNdr: +expectedNdr.toFixed(2),
     expectedDvlOrders,
-    netDvl: delivered,
+    netDvl,
     crPercent: +crPercent.toFixed(2),
     avgProfit: +avgProfit.toFixed(2),
     sumProfit: +sumProfit.toFixed(2),
@@ -106,7 +109,6 @@ export function parseSheet(workbook: any, opts: ParseOptions): SKUResult[] {
     status: String(r["الحالة"] || ""),
     date: r["تاريخ الإنشاء"] || "",
     products: String(r["المنتجات"] || ""),
-    // FIX: use safeNum here too, not Number()
     profit: safeNum(r["ربح الطلب"]),
     tax: safeNum(r["ربح الضريبة"]),
   }))
@@ -133,36 +135,52 @@ export function exportToXlsx(
   results: SKUResult[],
   spentValues: Record<string, string>,
   productNames: Record<string, string>,
-  sheetOwnerName: string
+  sheetOwnerName: string,
+  analysisDayEnd: number,
+  closedCycleDayEnd: number,
 ) {
   import("xlsx").then(XLSX => {
     const data = results.map(r => {
       const spent = parseFloat(spentValues[r.sku] || "0") || 0
-      const cpa = r.placedOrderNet > 0 ? spent / r.placedOrderNet : ""
-      const breakevenCpa = +r.avgProfit.toFixed(2)
-      const expectedProfit = +(r.expectedDvlOrders * r.avgProfit).toFixed(2)
-      const expectedNetProfit = +(expectedProfit - spent).toFixed(2)
-      const profit = +(r.delivered * r.avgProfit).toFixed(2)
-      const netProfit = +(profit - spent).toFixed(2)
       const name = productNames[r.sku] || r.sku
+
+      // All formulas as per spec:
+      // Net dvl = NDR% * Placed Order Net
+      const netDvl = r.netDvl
+      // Expected DVL Orders = Expected NDR% * Placed Order Net
+      const expectedDvlOrders = r.expectedDvlOrders
+      // CR% = Confirmed / Placed Order Net
+      const cr = r.placedOrderNet > 0 ? r.confirmedOrders / r.placedOrderNet : 0
+      // CPA USD = Total ads Cost / Placed Order Net
+      const cpa = spent && r.placedOrderNet > 0 ? spent / r.placedOrderNet : ""
+      // Breakeven CPA USD = Expected NDR% * AVG PROFIT / 3.75
+      const breakevenCpa = +((r.expectedNdr / 100) * r.avgProfit / 3.75).toFixed(2)
+      // Expected profit USD = AVG PROFIT * Expected DVL Orders / 3.75
+      const expectedProfit = +(r.avgProfit * expectedDvlOrders / 3.75).toFixed(2)
+      // Expected net profit USD = Expected profit - Total ads Cost
+      const expectedNetProfit = +(expectedProfit - spent).toFixed(2)
+      // Profit = Net DVL * AVG PROFIT / 3.75
+      const profit = +(netDvl * r.avgProfit / 3.75).toFixed(2)
+      // Net profit = Profit - Total ads Cost
+      const netProfit = +(profit - spent).toFixed(2)
 
       return {
         "sku": r.sku,
         "product name": name,
         "total order": r.totalOrders,
-        "Placed \nOrder net": r.placedOrderNet,
+        [`Placed\nOrder net`]: r.placedOrderNet,
         "Confirmed orders": r.confirmedOrders,
-        "Ndr to 10": +(r.ndr / 100).toFixed(4),
-        "Expected\nNDR to 5": +(r.expectedNdr / 100).toFixed(4),
-        "Net dvl": r.delivered,
-        "Expected\nDVL Orders": r.expectedDvlOrders,
-        "CR%": r.placedOrderNet > 0 ? +(r.confirmedOrders / r.placedOrderNet).toFixed(4) : 0,
+        [`NDR%\n1–${analysisDayEnd}`]: +(r.ndr / 100).toFixed(4),
+        [`Expected NDR%\n1–${closedCycleDayEnd}`]: +(r.expectedNdr / 100).toFixed(4),
+        "Net dvl": netDvl,
+        "Expected\nDVL Orders": expectedDvlOrders,
+        "CR%": +cr.toFixed(4),
         "AVG PROFIT": r.avgProfit,
-        "Total ads Cost \nUSD": spent || "",
+        "Total ads Cost\nUSD": spent || "",
         "CPA\nUSD": spent ? +Number(cpa).toFixed(2) : "",
         "Breakeven CPA\nUSD": breakevenCpa,
-        "Expected profit \nUSD": expectedProfit,
-        "Expected net profit \nUSD": expectedNetProfit,
+        "Expected profit\nUSD": expectedProfit,
+        "Expected net profit\nUSD": expectedNetProfit,
         "Pofit": profit,
         "Net profit": netProfit,
       }
@@ -172,18 +190,14 @@ export function exportToXlsx(
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "Sheet1")
 
-    // Column widths matching the template
     ws["!cols"] = [
       { wch: 18 }, { wch: 22 }, { wch: 12 }, { wch: 14 }, { wch: 16 },
-      { wch: 10 }, { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 8 },
+      { wch: 12 }, { wch: 16 }, { wch: 10 }, { wch: 14 }, { wch: 8 },
       { wch: 12 }, { wch: 16 }, { wch: 10 }, { wch: 16 }, { wch: 16 },
       { wch: 20 }, { wch: 12 }, { wch: 12 },
     ]
 
-    const fileName = sheetOwnerName
-      ? `${sheetOwnerName}_filled.xlsx`
-      : "sheet_filled.xlsx"
-
+    const fileName = sheetOwnerName ? `${sheetOwnerName}_filled.xlsx` : "sheet_filled.xlsx"
     XLSX.writeFile(wb, fileName)
   })
 }

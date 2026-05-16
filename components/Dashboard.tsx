@@ -26,7 +26,6 @@ export default function Dashboard() {
     setError("")
     fileRef.current = file
     setFileName(file.name)
-    // Extract owner name from filename e.g. "taager-orders-abdelrahman.xlsx" -> "abdelrahman"
     const baseName = file.name.replace(/\.[^/.]+$/, "")
     setSheetOwnerName(baseName)
     try {
@@ -37,7 +36,6 @@ export default function Dashboard() {
       const { parseSheet } = await import("@/lib/taager")
       const data = parseSheet(wb, { analysisDayEnd, closedCycleDayEnd })
       setResults(data)
-      // Init product names to SKU by default
       const names: Record<string, string> = {}
       data.forEach(r => { names[r.sku] = r.sku })
       setProductNames(names)
@@ -64,21 +62,25 @@ export default function Dashboard() {
 
   const handleDownload = useCallback(async () => {
     const { exportToXlsx } = await import("@/lib/taager")
-    exportToXlsx(results, spentValues, productNames, sheetOwnerName)
-  }, [results, spentValues, productNames, sheetOwnerName])
+    exportToXlsx(results, spentValues, productNames, sheetOwnerName, analysisDayEnd, closedCycleDayEnd)
+  }, [results, spentValues, productNames, sheetOwnerName, analysisDayEnd, closedCycleDayEnd])
 
   const totalOrders = results.reduce((s, r) => s + r.totalOrders, 0)
   const totalDelivered = results.reduce((s, r) => s + r.delivered, 0)
   const avgNdr = results.length ? results.reduce((s, r) => s + r.ndr, 0) / results.length : 0
   const topSku = results[0]
 
-  // Chart: show ALL skus but truncate label for readability
+  // Chart: ALL SKUs, short label = last 8 chars (unique suffix)
   const chartData = results.map(r => ({
-    sku: r.sku.length > 12 ? r.sku.slice(-8) : r.sku,
+    sku: r.sku.replace(/^SA\d+/, "").slice(0, 10) || r.sku.slice(-8),
     fullSku: r.sku,
     ndr: r.ndr,
     expectedNdr: r.expectedNdr,
   }))
+
+  // Dynamic column headers with day ranges
+  const colNdrDynamic = `NDR% 1–${analysisDayEnd}`
+  const colExpNdrDynamic = `Exp.NDR% (Day 1–${closedCycleDayEnd})`
 
   return (
     <div className="min-h-screen bg-bg grid-noise" dir={t.dir}>
@@ -114,26 +116,40 @@ export default function Dashboard() {
           <p className="text-muted text-sm mb-6">{t.tagline}</p>
 
           <div className={`flex flex-wrap gap-4 mb-4 ${isAr ? "flex-row-reverse" : ""}`}>
+            {/* Analysis range pill */}
             <div className="flex items-center gap-2 bg-surface border border-border rounded-lg px-4 py-2">
-              <span className="text-muted text-sm">{t.analysisRange}</span>
-              <input type="number" min={1} max={31} value={analysisDayEnd}
-                onChange={e => setAnalysisDayEnd(+e.target.value)}
-                className="w-12 bg-transparent text-white text-sm font-mono text-center outline-none border-b border-accent" />
+              <div>
+                <p className="text-muted text-xs mb-0.5">{t.analysisRangeLabel}</p>
+                <div className="flex items-center gap-1">
+                  <span className="text-white text-sm font-mono">Days 1 –</span>
+                  <input type="number" min={1} max={31} value={analysisDayEnd}
+                    onChange={e => setAnalysisDayEnd(+e.target.value)}
+                    className="w-10 bg-transparent text-accent text-sm font-mono text-center outline-none border-b border-accent" />
+                </div>
+              </div>
             </div>
+
+            {/* Closed cycle pill */}
             <div className="flex items-center gap-2 bg-surface border border-border rounded-lg px-4 py-2">
-              <span className="text-muted text-sm">{t.closedCycle}</span>
-              <input type="number" min={1} max={31} value={closedCycleDayEnd}
-                onChange={e => setClosedCycleDayEnd(+e.target.value)}
-                className="w-12 bg-transparent text-white text-sm font-mono text-center outline-none border-b border-accent" />
+              <div>
+                <p className="text-muted text-xs mb-0.5">{t.closedCycleLabel}</p>
+                <div className="flex items-center gap-1">
+                  <span className="text-white text-sm font-mono">{t.closedCyclePrefix}</span>
+                  <input type="number" min={1} max={31} value={closedCycleDayEnd}
+                    onChange={e => setClosedCycleDayEnd(+e.target.value)}
+                    className="w-10 bg-transparent text-purple-400 text-sm font-mono text-center outline-none border-b border-purple-400" />
+                </div>
+              </div>
             </div>
+
             {fileName && (
-              <button onClick={handleReprocess} className="bg-accent-dim hover:opacity-90 text-white px-4 py-2 rounded-lg text-sm font-medium transition-opacity">
+              <button onClick={handleReprocess} className="bg-accent-dim hover:opacity-90 text-white px-4 py-2 rounded-lg text-sm font-medium transition-opacity self-end">
                 {t.reanalyze}
               </button>
             )}
           </div>
 
-          {/* Sheet owner name input */}
+          {/* Sheet owner name */}
           {results.length > 0 && (
             <div className="flex items-center gap-2 mb-4">
               <Pencil className="w-4 h-4 text-muted" />
@@ -166,7 +182,7 @@ export default function Dashboard() {
 
         {results.length > 0 && (
           <>
-            {/* Summary Cards */}
+            {/* Summary Cards — bigger label */}
             <section className="fade-up fade-up-2">
               <h2 className="font-display text-xl font-semibold mb-4">{t.overview}</h2>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -187,8 +203,8 @@ export default function Dashboard() {
                     <p className="text-muted text-sm">{topSku.totalOrders} {t.orders}</p>
                   </div>
                   <div className={`flex flex-wrap gap-6 text-sm ${isAr ? "flex-row-reverse" : ""}`}>
-                    <Pill label={t.ndrLabel} value={`${topSku.ndr}%`} />
-                    <Pill label={t.expectedNdr} value={`${topSku.expectedNdr}%`} />
+                    <Pill label={colNdrDynamic} value={`${topSku.ndr}%`} />
+                    <Pill label={colExpNdrDynamic} value={`${topSku.expectedNdr}%`} />
                     <Pill label={t.confirmed} value={topSku.confirmedOrders} />
                     <Pill label={t.avgProfit} value={`${topSku.avgProfit.toFixed(2)} SAR`} />
                   </div>
@@ -196,23 +212,38 @@ export default function Dashboard() {
               </section>
             )}
 
-            {/* NDR Chart — ALL SKUs, scrollable */}
+            {/* NDR Chart — fixed: wider per bar, no truncation */}
             <section className="fade-up fade-up-3">
-              <h2 className="font-display text-xl font-semibold mb-4">{t.chartTitle}</h2>
+              <h2 className="font-display text-xl font-semibold mb-1">{t.chartTitle}</h2>
+              <p className="text-muted text-xs mb-4">
+                {t.chartSubtitleOrange} <span className="text-accent font-medium">Days 1–{analysisDayEnd}</span>
+                {"  ·  "}
+                {t.chartSubtitlePurple} <span className="text-purple-400 font-medium">Days 1–{closedCycleDayEnd}</span>
+              </p>
               <div className="bg-surface border border-border rounded-2xl p-6 overflow-x-auto">
-                <div style={{ minWidth: Math.max(600, chartData.length * 80) }}>
-                  <ResponsiveContainer width="100%" height={240}>
-                    <BarChart data={chartData} barGap={2} barCategoryGap="25%">
-                      <XAxis dataKey="sku" tick={{ fill: "#6B7280", fontSize: 10 }} axisLine={false} tickLine={false} interval={0} />
+                {/* Each SKU gets 90px width minimum so none are cut off */}
+                <div style={{ width: Math.max(700, chartData.length * 90), height: 260 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={chartData} barGap={3} barCategoryGap="30%">
+                      <XAxis
+                        dataKey="sku"
+                        tick={{ fill: "#6B7280", fontSize: 9, fontFamily: "monospace" }}
+                        axisLine={false}
+                        tickLine={false}
+                        interval={0}
+                        angle={-35}
+                        textAnchor="end"
+                        height={55}
+                      />
                       <YAxis tick={{ fill: "#6B7280", fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `${v}%`} />
                       <Tooltip
                         contentStyle={{ background: "#12121A", border: "1px solid #1E1E2E", borderRadius: 8, fontSize: 12 }}
-                        labelFormatter={(label, payload) => payload?.[0]?.payload?.fullSku || label}
+                        labelFormatter={(_label: any, payload: any) => payload?.[0]?.payload?.fullSku || _label}
                         formatter={(val: any, name: string) => [`${Number(val).toFixed(1)}%`, name]}
                       />
-                      <Legend />
-                      <Bar dataKey="ndr" name={t.currentNdr} fill="#F97316" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="expectedNdr" name={t.expectedNdrLegend} fill="#7C3AED" radius={[4, 4, 0, 0]} />
+                      <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
+                      <Bar dataKey="ndr" name={`NDR% 1–${analysisDayEnd}`} fill="#F97316" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="expectedNdr" name={`Exp.NDR% 1–${closedCycleDayEnd}`} fill="#7C3AED" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -240,42 +271,77 @@ export default function Dashboard() {
                 <table className="w-full text-sm" dir="ltr">
                   <thead>
                     <tr className="bg-surface border-b border-border">
-                      {[t.colSku, t.colProductName, t.colTotalOrders, t.colPlacedNet, t.colConfirmed,
-                        t.colDelivered, t.colNdr, t.colExpNdr, t.colExpDvl,
-                        t.colCr, t.colAvgProfit, t.colSpent].map(h => (
-                        <th key={h} className="px-4 py-3 text-left text-muted font-medium whitespace-nowrap">{h}</th>
+                      {[
+                        t.colSku,
+                        t.colProductName,
+                        t.colTotalOrders,
+                        t.colPlacedNet,
+                        t.colConfirmed,
+                        t.colDelivered,
+                        colNdrDynamic,
+                        colExpNdrDynamic,
+                        "Net DVL",
+                        "Exp. DVL Orders",
+                        "CR%",
+                        "AVG Profit",
+                        t.colSpent,
+                        "CPA (USD)",
+                        "Breakeven CPA",
+                        "Exp. Profit (USD)",
+                        "Exp. Net Profit",
+                        "Profit",
+                        "Net Profit",
+                      ].map(h => (
+                        <th key={h} className="px-3 py-3 text-left text-muted font-medium whitespace-nowrap text-xs">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {results.map((r, i) => (
-                      <tr key={r.sku} className={`border-b border-border hover:bg-surface/50 transition-colors ${i % 2 === 0 ? "" : "bg-white/[0.01]"}`}>
-                        <td className="px-4 py-3 font-mono text-xs text-accent whitespace-nowrap">{r.sku}</td>
-                        <td className="px-4 py-3">
-                          <input
-                            value={productNames[r.sku] || ""}
-                            onChange={e => setProductNames(prev => ({ ...prev, [r.sku]: e.target.value }))}
-                            placeholder={r.sku}
-                            className="w-36 bg-bg border border-border focus:border-accent/60 rounded-lg px-2 py-1 text-white text-xs outline-none transition-colors"
-                          />
-                        </td>
-                        <td className="px-4 py-3 text-center font-medium">{r.totalOrders}</td>
-                        <td className="px-4 py-3 text-center">{r.placedOrderNet}</td>
-                        <td className="px-4 py-3 text-center">{r.confirmedOrders}</td>
-                        <td className="px-4 py-3 text-center text-success font-medium">{r.delivered}</td>
-                        <td className="px-4 py-3 text-center"><NdrBadge value={r.ndr} /></td>
-                        <td className="px-4 py-3 text-center"><NdrBadge value={r.expectedNdr} dim /></td>
-                        <td className="px-4 py-3 text-center text-muted">{r.expectedDvlOrders}</td>
-                        <td className="px-4 py-3 text-center text-muted">{r.crPercent}%</td>
-                        <td className="px-4 py-3 text-center font-medium">{r.avgProfit.toFixed(2)}</td>
-                        <td className="px-4 py-3">
-                          <input type="number" placeholder="0.00"
-                            value={spentValues[r.sku] || ""}
-                            onChange={e => setSpentValues(prev => ({ ...prev, [r.sku]: e.target.value }))}
-                            className="w-24 bg-bg border border-accent/40 focus:border-accent rounded-lg px-3 py-1.5 text-white text-sm outline-none transition-colors font-mono text-center" />
-                        </td>
-                      </tr>
-                    ))}
+                    {results.map((r, i) => {
+                      const spent = parseFloat(spentValues[r.sku] || "0") || 0
+                      const cpa = r.placedOrderNet > 0 ? spent / r.placedOrderNet : 0
+                      const breakevenCpa = +(r.expectedNdr / 100 * r.avgProfit / 3.75).toFixed(2)
+                      const expProfit = +(r.avgProfit * r.expectedDvlOrders / 3.75).toFixed(2)
+                      const expNetProfit = +(expProfit - spent).toFixed(2)
+                      const profit = +(r.delivered * r.avgProfit / 3.75).toFixed(2)
+                      const netProfit = +(profit - spent).toFixed(2)
+
+                      return (
+                        <tr key={r.sku} className={`border-b border-border hover:bg-surface/50 transition-colors ${i % 2 === 0 ? "" : "bg-white/[0.01]"}`}>
+                          <td className="px-3 py-3 font-mono text-xs text-accent whitespace-nowrap">{r.sku}</td>
+                          <td className="px-3 py-3">
+                            <input
+                              value={productNames[r.sku] || ""}
+                              onChange={e => setProductNames(prev => ({ ...prev, [r.sku]: e.target.value }))}
+                              placeholder={r.sku}
+                              className="w-32 bg-bg border border-border focus:border-accent/60 rounded-lg px-2 py-1 text-white text-xs outline-none transition-colors"
+                            />
+                          </td>
+                          <td className="px-3 py-3 text-center font-medium">{r.totalOrders}</td>
+                          <td className="px-3 py-3 text-center">{r.placedOrderNet}</td>
+                          <td className="px-3 py-3 text-center">{r.confirmedOrders}</td>
+                          <td className="px-3 py-3 text-center text-success font-medium">{r.delivered}</td>
+                          <td className="px-3 py-3 text-center"><NdrBadge value={r.ndr} /></td>
+                          <td className="px-3 py-3 text-center"><NdrBadge value={r.expectedNdr} dim /></td>
+                          <td className="px-3 py-3 text-center text-muted">{r.delivered}</td>
+                          <td className="px-3 py-3 text-center text-muted">{r.expectedDvlOrders}</td>
+                          <td className="px-3 py-3 text-center text-muted">{r.crPercent}%</td>
+                          <td className="px-3 py-3 text-center font-medium">{r.avgProfit.toFixed(2)}</td>
+                          <td className="px-3 py-3">
+                            <input type="number" placeholder="0.00"
+                              value={spentValues[r.sku] || ""}
+                              onChange={e => setSpentValues(prev => ({ ...prev, [r.sku]: e.target.value }))}
+                              className="w-20 bg-bg border border-accent/40 focus:border-accent rounded-lg px-2 py-1.5 text-white text-sm outline-none transition-colors font-mono text-center" />
+                          </td>
+                          <td className="px-3 py-3 text-center text-muted">{spent ? cpa.toFixed(2) : "—"}</td>
+                          <td className="px-3 py-3 text-center text-muted">{breakevenCpa}</td>
+                          <td className="px-3 py-3 text-center text-muted">{expProfit}</td>
+                          <td className="px-3 py-3 text-center text-muted">{expNetProfit}</td>
+                          <td className="px-3 py-3 text-center text-muted">{profit}</td>
+                          <td className="px-3 py-3 text-center text-muted">{netProfit}</td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -287,6 +353,7 @@ export default function Dashboard() {
   )
 }
 
+// BIGGER label text: text-sm instead of text-xs
 function StatCard({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: any; color: string }) {
   const colorMap: Record<string, string> = {
     accent: "text-accent bg-accent/10",
@@ -297,8 +364,8 @@ function StatCard({ icon, label, value, color }: { icon: React.ReactNode; label:
   return (
     <div className="bg-surface border border-border rounded-xl p-5">
       <div className={`w-9 h-9 rounded-lg flex items-center justify-center mb-3 ${colorMap[color]}`}>{icon}</div>
-      <p className="text-muted text-xs mb-1">{label}</p>
-      <p className="font-display text-2xl font-bold">{value}</p>
+      <p className="text-muted text-sm font-medium mb-1">{label}</p>
+      <p className="font-display text-3xl font-bold">{value}</p>
     </div>
   )
 }
