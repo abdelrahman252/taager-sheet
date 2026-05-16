@@ -49,6 +49,7 @@ export const translations = {
     colDelivered: "تم التوصيل",
     colSpent: "Spent (USD)",
     parseError: "Failed to parse file: ",
+    scrollHint: "Scroll sideways to see all columns",
   },
   ar: {
     dir: "rtl" as const,
@@ -98,6 +99,7 @@ export const translations = {
     colDelivered: "تم التوصيل",
     colSpent: "المنفق (USD)",
     parseError: "فشل في قراءة الملف: ",
+    scrollHint: "مرر يميناً لرؤية جميع الأعمدة",
   },
 }
 

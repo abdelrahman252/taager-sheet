@@ -1,6 +1,6 @@
 "use client"
 import { useState, useCallback, useRef } from "react"
-import { Upload, FileSpreadsheet, Download, TrendingUp, Package, Truck, Globe, Pencil, ChevronDown, ChevronUp } from "lucide-react"
+import { Upload, FileSpreadsheet, Download, TrendingUp, Package, Truck, Globe, Pencil } from "lucide-react"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts"
 import type { SKUResult } from "@/lib/taager"
 import { translations, type Lang } from "@/lib/i18n"
@@ -21,7 +21,6 @@ export default function Dashboard() {
   const [fileName, setFileName] = useState("")
   const [sheetOwnerName, setSheetOwnerName] = useState("")
   const [error, setError] = useState("")
-  const [expandedSku, setExpandedSku] = useState<string | null>(null)
   const fileRef = useRef<File | null>(null)
 
   const processFile = useCallback(async (file: File) => {
@@ -299,98 +298,9 @@ export default function Dashboard() {
                 </button>
               </div>
 
-              {/* MOBILE: card per SKU (hidden on desktop) */}
-              <div className="flex flex-col gap-3 sm:hidden">
-                {results.map((r, i) => {
-                  const spent = parseFloat(spentValues[r.sku] || "0") || 0
-                  const cpa = r.placedOrderNet > 0 && spent ? (spent / r.placedOrderNet).toFixed(2) : "—"
-                  const breakevenCpa = +(r.expectedNdr / 100 * r.avgProfit / 3.75).toFixed(2)
-                  const expProfit = +(r.avgProfit * r.expectedDvlOrders / 3.75).toFixed(2)
-                  const expNetProfit = +(expProfit - spent).toFixed(2)
-                  const profit = +(r.delivered * r.avgProfit / 3.75).toFixed(2)
-                  const netProfit = +(profit - spent).toFixed(2)
-                  const isOpen = expandedSku === r.sku
-
-                  return (
-                    <div key={r.sku} className="bg-surface border border-border rounded-xl overflow-hidden">
-                      {/* Card header — always visible */}
-                      <button
-                        className="w-full text-left px-4 py-3 flex items-center justify-between gap-3"
-                        onClick={() => setExpandedSku(isOpen ? null : r.sku)}
-                      >
-                        <div className="min-w-0">
-                          <p className="font-mono text-xs text-accent truncate">{r.sku}</p>
-                          <p className="text-white text-sm font-medium mt-0.5 truncate">{productNames[r.sku] || r.sku}</p>
-                        </div>
-                        <div className="flex items-center gap-3 shrink-0">
-                          <div className="text-right">
-                            <p className="text-xs text-muted">NDR</p>
-                            <NdrBadge value={r.ndr} />
-                          </div>
-                          <div className="text-right">
-                            <p className="text-xs text-muted">Orders</p>
-                            <p className="text-white font-bold text-sm">{r.totalOrders}</p>
-                          </div>
-                          {isOpen ? <ChevronUp className="w-4 h-4 text-muted" /> : <ChevronDown className="w-4 h-4 text-muted" />}
-                        </div>
-                      </button>
-
-                      {/* Expanded details */}
-                      {isOpen && (
-                        <div className="border-t border-border px-4 pb-4 pt-3 space-y-3">
-                          {/* Product name input */}
-                          <div>
-                            <p className="text-muted text-xs mb-1">{t.colProductName}</p>
-                            <input
-                              value={productNames[r.sku] || ""}
-                              onChange={e => setProductNames(prev => ({ ...prev, [r.sku]: e.target.value }))}
-                              placeholder={r.sku}
-                              className="w-full bg-bg border border-border focus:border-accent/60 rounded-lg px-3 py-2 text-white text-sm outline-none transition-colors"
-                            />
-                          </div>
-
-                          {/* Key metrics grid */}
-                          <div className="grid grid-cols-3 gap-2">
-                            <MobileMetric label="Total Orders" value={r.totalOrders} />
-                            <MobileMetric label="Placed Net" value={r.placedOrderNet} />
-                            <MobileMetric label="Confirmed" value={r.confirmedOrders} />
-                            <MobileMetric label="Delivered" value={r.delivered} highlight="success" />
-                            <MobileMetric label={colNdrDynamic} value={`${r.ndr}%`} highlight={r.ndr >= 30 ? "success" : r.ndr >= 20 ? "warning" : "danger"} />
-                            <MobileMetric label={colExpNdrDynamic} value={`${r.expectedNdr}%`} highlight="purple" />
-                            <MobileMetric label="Net DVL" value={r.netDvl} />
-                            <MobileMetric label="Exp. DVL" value={r.expectedDvlOrders} />
-                            <MobileMetric label="CR%" value={`${r.crPercent}%`} />
-                            <MobileMetric label="AVG Profit" value={r.avgProfit.toFixed(2)} />
-                            <MobileMetric label="Breakeven CPA" value={breakevenCpa} />
-                            <MobileMetric label="Exp. Profit" value={expProfit} />
-                          </div>
-
-                          {/* Spent input */}
-                          <div>
-                            <p className="text-muted text-xs mb-1">{t.colSpent}</p>
-                            <input type="number" placeholder="0.00"
-                              value={spentValues[r.sku] || ""}
-                              onChange={e => setSpentValues(prev => ({ ...prev, [r.sku]: e.target.value }))}
-                              className="w-full bg-bg border border-accent/40 focus:border-accent rounded-lg px-3 py-2 text-white text-sm outline-none transition-colors font-mono" />
-                          </div>
-
-                          {/* Calculated values */}
-                          <div className="grid grid-cols-2 gap-2 pt-1 border-t border-border">
-                            <MobileMetric label="CPA (USD)" value={cpa} />
-                            <MobileMetric label="Exp. Net Profit" value={expNetProfit} highlight={expNetProfit > 0 ? "success" : "danger"} />
-                            <MobileMetric label="Profit" value={profit} />
-                            <MobileMetric label="Net Profit" value={netProfit} highlight={netProfit > 0 ? "success" : "danger"} />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-
-              {/* DESKTOP: full table (hidden on mobile) */}
-              <div className="hidden sm:block overflow-x-auto rounded-2xl border border-border">
-                <table className="w-full text-sm" dir="ltr">
+              {/* Scrollable table — all screen sizes */}
+              <div className="overflow-x-auto rounded-2xl border border-border">
+                <table className="w-full text-sm" dir="ltr" style={{ minWidth: 1100 }}>
                   <thead>
                     <tr className="bg-surface border-b border-border">
                       {[
@@ -453,6 +363,7 @@ export default function Dashboard() {
                   </tbody>
                 </table>
               </div>
+              <p className="text-muted text-xs mt-2">← {t.scrollHint}</p>
             </section>
           </>
         )}
@@ -482,22 +393,6 @@ function Pill({ label, value }: { label: string; value: any }) {
     <div>
       <p className="text-muted text-xs">{label}</p>
       <p className="text-white font-semibold text-sm sm:text-base">{value}</p>
-    </div>
-  )
-}
-
-function MobileMetric({ label, value, highlight }: { label: string; value: any; highlight?: string }) {
-  const colorMap: Record<string, string> = {
-    success: "text-success",
-    danger: "text-danger",
-    warning: "text-warning",
-    purple: "text-purple-400",
-  }
-  const valueColor = highlight ? colorMap[highlight] || "text-white" : "text-white"
-  return (
-    <div className="bg-bg rounded-lg px-3 py-2">
-      <p className="text-muted text-xs mb-0.5 truncate">{label}</p>
-      <p className={`font-semibold text-sm ${valueColor}`}>{value}</p>
     </div>
   )
 }
