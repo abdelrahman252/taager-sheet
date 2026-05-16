@@ -21,7 +21,9 @@ export interface SKUResult {
 }
 
 export interface ParseOptions {
+  analysisDayStart: number
   analysisDayEnd: number
+  closedCycleDayStart: number
   closedCycleDayEnd: number
 }
 
@@ -48,10 +50,11 @@ function dayOf(val: Date | string | number): number {
   return new Date(String(val)).getDate()
 }
 
-function calcSKU(rows: RawRow[], sku: string, allRows: RawRow[], closedCycleDayEnd: number): SKUResult {
+function calcSKU(rows: RawRow[], sku: string, allRows: RawRow[], closedCycleDayStart: number, closedCycleDayEnd: number): SKUResult {
   const main = rows.filter(r => r.products && r.products.includes(sku))
   const closed = allRows.filter(r =>
-    r.products && r.products.includes(sku) && dayOf(r.date) <= closedCycleDayEnd
+    r.products && r.products.includes(sku) &&
+    dayOf(r.date) >= closedCycleDayStart && dayOf(r.date) <= closedCycleDayEnd
   )
 
   const totalOrders = main.length
@@ -115,18 +118,17 @@ export function parseSheet(workbook: any, opts: ParseOptions): SKUResult[] {
 
   const analysisRows = rows.filter(r => {
     const d = dayOf(r.date)
-    return d >= 1 && d <= opts.analysisDayEnd
+    return d >= opts.analysisDayStart && d <= opts.analysisDayEnd
   })
 
-  const skuSet = new Set<string>()
-  analysisRows.forEach(r => {
+  const skuSet = new Set<string>()\n  analysisRows.forEach(r => {
     if (r.products) {
       r.products.split(",").map((s: string) => s.trim()).filter(Boolean).forEach((s: string) => skuSet.add(s))
     }
   })
 
   return Array.from(skuSet)
-    .map(sku => calcSKU(analysisRows, sku, rows, opts.closedCycleDayEnd))
+    .map(sku => calcSKU(analysisRows, sku, rows, opts.closedCycleDayStart, opts.closedCycleDayEnd))
     .filter(s => s.totalOrders > 0)
     .sort((a, b) => b.totalOrders - a.totalOrders)
 }
@@ -136,7 +138,9 @@ export function exportToXlsx(
   spentValues: Record<string, string>,
   productNames: Record<string, string>,
   sheetOwnerName: string,
+  analysisDayStart: number,
   analysisDayEnd: number,
+  closedCycleDayStart: number,
   closedCycleDayEnd: number,
 ) {
   import("xlsx").then(XLSX => {
@@ -144,25 +148,18 @@ export function exportToXlsx(
       const spent = parseFloat(spentValues[r.sku] || "0") || 0
       const name = productNames[r.sku] || r.sku
 
-      // All formulas as per spec:
-      // Net dvl = NDR% * Placed Order Net
       const netDvl = r.netDvl
-      // Expected DVL Orders = Expected NDR% * Placed Order Net
       const expectedDvlOrders = r.expectedDvlOrders
-      // CR% = Confirmed / Placed Order Net
       const cr = r.placedOrderNet > 0 ? r.confirmedOrders / r.placedOrderNet : 0
-      // CPA USD = Total ads Cost / Placed Order Net
       const cpa = spent && r.placedOrderNet > 0 ? spent / r.placedOrderNet : ""
-      // Breakeven CPA USD = Expected NDR% * AVG PROFIT / 3.75
       const breakevenCpa = +((r.expectedNdr / 100) * r.avgProfit / 3.75).toFixed(2)
-      // Expected profit USD = AVG PROFIT * Expected DVL Orders / 3.75
       const expectedProfit = +(r.avgProfit * expectedDvlOrders / 3.75).toFixed(2)
-      // Expected net profit USD = Expected profit - Total ads Cost
       const expectedNetProfit = +(expectedProfit - spent).toFixed(2)
-      // Profit = Net DVL * AVG PROFIT / 3.75
       const profit = +(netDvl * r.avgProfit / 3.75).toFixed(2)
-      // Net profit = Profit - Total ads Cost
       const netProfit = +(profit - spent).toFixed(2)
+
+      const analysisLabel = analysisDayStart === 1 ? `1–${analysisDayEnd}` : `${analysisDayStart}–${analysisDayEnd}`
+      const closedLabel = closedCycleDayStart === 1 ? `1–${closedCycleDayEnd}` : `${closedCycleDayStart}–${closedCycleDayEnd}`
 
       return {
         "sku": r.sku,
@@ -170,8 +167,8 @@ export function exportToXlsx(
         "total order": r.totalOrders,
         [`Placed\nOrder net`]: r.placedOrderNet,
         "Confirmed orders": r.confirmedOrders,
-        [`NDR%\n1–${analysisDayEnd}`]: +(r.ndr / 100).toFixed(4),
-        [`Expected NDR%\n1–${closedCycleDayEnd}`]: +(r.expectedNdr / 100).toFixed(4),
+        [`NDR%\n${analysisLabel}`]: +(r.ndr / 100).toFixed(4),
+        [`Expected NDR%\n${closedLabel}`]: +(r.expectedNdr / 100).toFixed(4),
         "Net dvl": netDvl,
         "Expected\nDVL Orders": expectedDvlOrders,
         "CR%": +cr.toFixed(4),
