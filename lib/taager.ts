@@ -145,42 +145,40 @@ export function exportToXlsx(
   closedCycleDayEnd: number,
 ) {
   import("xlsx").then(XLSX => {
+    const analysisLabel = analysisDayStart === 1 ? `1-${analysisDayEnd}` : `${analysisDayStart}-${analysisDayEnd}`
+    const closedLabel = closedCycleDayStart === 1 ? `1-${closedCycleDayEnd}` : `${closedCycleDayStart}-${closedCycleDayEnd}`
+
     const data = results.map(r => {
       const spent = parseFloat(spentValues[r.sku] || "0") || 0
       const name = productNames[r.sku] || r.sku
-
-      const netDvl = r.netDvl
-      const expectedDvlOrders = r.expectedDvlOrders
       const cr = r.placedOrderNet > 0 ? r.confirmedOrders / r.placedOrderNet : 0
       const cpa = spent && r.placedOrderNet > 0 ? spent / r.placedOrderNet : ""
       const breakevenCpa = +((r.expectedNdr / 100) * r.avgProfit / 3.75).toFixed(2)
-      const expectedProfit = +(r.avgProfit * expectedDvlOrders / 3.75).toFixed(2)
+      const expectedProfit = +(r.avgProfit * r.expectedDvlOrders / 3.75).toFixed(2)
       const expectedNetProfit = +(expectedProfit - spent).toFixed(2)
-      const profit = +(netDvl * r.avgProfit / 3.75).toFixed(2)
+      const profit = +(r.netDvl * r.avgProfit / 3.75).toFixed(2)
       const netProfit = +(profit - spent).toFixed(2)
 
-      const analysisLabel = analysisDayStart === 1 ? `1–${analysisDayEnd}` : `${analysisDayStart}–${analysisDayEnd}`
-      const closedLabel = closedCycleDayStart === 1 ? `1–${closedCycleDayEnd}` : `${closedCycleDayStart}–${closedCycleDayEnd}`
-
       return {
-        "sku": r.sku,
-        "product name": name,
-        "total order": r.totalOrders,
-        [`Placed\nOrder net`]: r.placedOrderNet,
-        "Confirmed orders": r.confirmedOrders,
-        [`NDR%\n${analysisLabel}`]: +(r.ndr / 100).toFixed(4),
-        [`Expected NDR%\n${closedLabel}`]: +(r.expectedNdr / 100).toFixed(4),
-        "Net dvl": netDvl,
-        "Expected\nDVL Orders": expectedDvlOrders,
+        "SKU": r.sku,
+        "Product Name": name,
+        "Total Orders": r.totalOrders,
+        "Placed Order Net": r.placedOrderNet,
+        "Confirmed Orders": r.confirmedOrders,
+        "Delivered": r.delivered,
+        [`NDR% (${analysisLabel})`]: +(r.ndr / 100).toFixed(4),
+        [`Expected NDR% (${closedLabel})`]: +(r.expectedNdr / 100).toFixed(4),
+        "Net DVL": r.netDvl,
+        "Expected DVL Orders": r.expectedDvlOrders,
         "CR%": +cr.toFixed(4),
-        "AVG PROFIT": r.avgProfit,
-        "Total ads Cost\nUSD": spent || "",
-        "CPA\nUSD": spent ? +Number(cpa).toFixed(2) : "",
-        "Breakeven CPA\nUSD": breakevenCpa,
-        "Expected profit\nUSD": expectedProfit,
-        "Expected net profit\nUSD": expectedNetProfit,
-        "Pofit": profit,
-        "Net profit": netProfit,
+        "AVG Profit": r.avgProfit,
+        "Total Ads Cost (USD)": spent || "",
+        "CPA (USD)": spent ? +Number(cpa).toFixed(2) : "",
+        "Breakeven CPA (USD)": breakevenCpa,
+        "Expected Profit (USD)": expectedProfit,
+        "Expected Net Profit (USD)": expectedNetProfit,
+        "Profit (USD)": profit,
+        "Net Profit (USD)": netProfit,
       }
     })
 
@@ -189,10 +187,10 @@ export function exportToXlsx(
     XLSX.utils.book_append_sheet(wb, ws, "Sheet1")
 
     ws["!cols"] = [
-      { wch: 18 }, { wch: 22 }, { wch: 12 }, { wch: 14 }, { wch: 16 },
-      { wch: 12 }, { wch: 16 }, { wch: 10 }, { wch: 14 }, { wch: 8 },
-      { wch: 12 }, { wch: 16 }, { wch: 10 }, { wch: 16 }, { wch: 16 },
-      { wch: 20 }, { wch: 12 }, { wch: 12 },
+      { wch: 20 }, { wch: 24 }, { wch: 14 }, { wch: 16 }, { wch: 17 },
+      { wch: 12 }, { wch: 14 }, { wch: 18 }, { wch: 10 }, { wch: 20 },
+      { wch: 8  }, { wch: 12 }, { wch: 20 }, { wch: 12 }, { wch: 20 },
+      { wch: 20 }, { wch: 24 }, { wch: 14 }, { wch: 16 },
     ]
 
     const fileName = sheetOwnerName ? `${sheetOwnerName}_filled.xlsx` : "sheet_filled.xlsx"
