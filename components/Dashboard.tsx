@@ -306,9 +306,9 @@ export default function Dashboard() {
                       {[
                         t.colSku, t.colProductName, t.colTotalOrders, t.colPlacedNet, t.colConfirmed,
                         t.colDelivered, colNdrDynamic, colExpNdrDynamic,
-                        "Net DVL", "Exp. DVL", "CR%", "AVG Profit",
-                        t.colSpent, "CPA (USD)", "Breakeven CPA",
-                        "Exp. Profit", "Exp. Net Profit", "Profit", "Net Profit",
+                        t.colNetDvl, t.colExpDvl, t.colCr, t.colAvgProfit,
+                        t.colSpent, t.colCpa, t.colBreakevenCpa,
+                        t.colExpProfit, t.colExpNetProfit, t.colProfit, t.colNetProfit,
                       ].map(h => (
                         <th key={h} className="px-3 py-3 text-left text-muted font-medium whitespace-nowrap text-xs">{h}</th>
                       ))}
