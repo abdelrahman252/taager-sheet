@@ -46,7 +46,7 @@ export const translations = {
     colTotalOrders: "Total Orders",
     colPlacedNet: "Placed Net",
     colConfirmed: "Confirmed",
-    colDelivered: "تم التوصيل",
+    colDelivered: "Delivered",
     colSpent: "Spent (USD)",
     parseError: "Failed to parse file: ",
     scrollHint: "Scroll sideways to see all columns",

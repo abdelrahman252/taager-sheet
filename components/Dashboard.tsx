@@ -249,7 +249,7 @@ export default function Dashboard() {
                 <span className="inline-block w-2.5 h-2.5 rounded-sm bg-purple-500 mr-1 align-middle" />
                 {t.chartSubtitlePurple} <span className="text-purple-400 font-semibold">Days {closedLabel}</span>
               </p>
-              <div className="bg-surface border border-border rounded-2xl p-3 sm:p-6 overflow-x-auto">
+              <div className="bg-surface border border-border rounded-2xl p-3 sm:p-6 overflow-x-auto" dir="ltr">
                 <div style={{ width: Math.max(360, chartData.length * 110), height: 300 }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={chartData} barGap={4} barCategoryGap="28%" margin={{ bottom: 80, top: 10, left: 5, right: 10 }}>
@@ -271,8 +271,8 @@ export default function Dashboard() {
                         cursor={{ fill: "rgba(255,255,255,0.04)" }}
                       />
                       <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
-                      <Bar dataKey="ndr" name={`NDR% 1–${analysisDayEnd}`} fill="#F97316" radius={[5, 5, 0, 0]} minPointSize={2} />
-                      <Bar dataKey="expectedNdr" name={`Exp.NDR% 1–${closedCycleDayEnd}`} fill="#7C3AED" radius={[5, 5, 0, 0]} minPointSize={2} />
+                      <Bar dataKey="ndr" name={colNdrDynamic} fill="#F97316" radius={[5, 5, 0, 0]} minPointSize={2} />
+                      <Bar dataKey="expectedNdr" name={colExpNdrDynamic} fill="#7C3AED" radius={[5, 5, 0, 0]} minPointSize={2} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
