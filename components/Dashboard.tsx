@@ -1,6 +1,6 @@
 "use client"
 import { useState, useCallback, useRef } from "react"
-import { Upload, FileSpreadsheet, Download, TrendingUp, Package, Truck, Globe, Pencil } from "lucide-react"
+import { Upload, FileSpreadsheet, Download, TrendingUp, Package, Truck, Globe, Pencil, Search, X } from "lucide-react"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts"
 import type { SKUResult } from "@/lib/taager"
 import { translations, type Lang } from "@/lib/i18n"
@@ -17,6 +17,7 @@ export default function Dashboard() {
   const [analysisDayEnd, setAnalysisDayEnd] = useState(9)
   const [closedCycleDayStart, setClosedCycleDayStart] = useState(1)
   const [closedCycleDayEnd, setClosedCycleDayEnd] = useState(5)
+  const [skuSearch, setSkuSearch] = useState("")
   const [loading, setLoading] = useState(false)
   const [fileName, setFileName] = useState("")
   const [sheetOwnerName, setSheetOwnerName] = useState("")
@@ -85,6 +86,10 @@ export default function Dashboard() {
       ndr: r.ndr,
       expectedNdr: r.expectedNdr,
     }))
+
+  const filteredResults = skuSearch.trim()
+    ? results.filter(r => r.sku.toLowerCase().includes(skuSearch.trim().toLowerCase()))
+    : results
 
   const analysisLabel = analysisDayStart === 1 ? `1–${analysisDayEnd}` : `${analysisDayStart}–${analysisDayEnd}`
   const closedLabel = closedCycleDayStart === 1 ? `1–${closedCycleDayEnd}` : `${closedCycleDayStart}–${closedCycleDayEnd}`
@@ -298,6 +303,26 @@ export default function Dashboard() {
                 </button>
               </div>
 
+              {/* SKU Search Bar */}
+              <div className="relative mb-4 max-w-sm">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted pointer-events-none" />
+                <input
+                  type="text"
+                  value={skuSearch}
+                  onChange={e => setSkuSearch(e.target.value)}
+                  placeholder="Search SKU…"
+                  className="w-full bg-surface border border-border focus:border-accent rounded-xl pl-9 pr-8 py-2 text-white text-sm outline-none transition-colors font-mono"
+                />
+                {skuSearch && (
+                  <button
+                    onClick={() => setSkuSearch("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted hover:text-white transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
               {/* Scrollable table — all screen sizes */}
               <div className="overflow-x-auto rounded-2xl border border-border">
                 <table className="w-full text-sm" dir="ltr" style={{ minWidth: 1100 }}>
@@ -315,7 +340,13 @@ export default function Dashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {results.map((r, i) => {
+                    {filteredResults.length === 0 && skuSearch ? (
+                      <tr>
+                        <td colSpan={19} className="px-3 py-10 text-center text-muted text-sm">
+                          No SKU found matching <span className="font-mono text-accent">"{skuSearch}"</span>
+                        </td>
+                      </tr>
+                    ) : filteredResults.map((r, i) => {
                       const spent = parseFloat(spentValues[r.sku] || "0") || 0
                       const cpa = r.placedOrderNet > 0 ? spent / r.placedOrderNet : 0
                       const breakevenCpa = +(r.expectedNdr / 100 * r.avgProfit / 3.75).toFixed(2)
