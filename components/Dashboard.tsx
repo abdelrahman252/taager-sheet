@@ -298,8 +298,10 @@ export default function Dashboard() {
           border: 1.5px solid var(--tooltip-border);
           border-radius: 10px;
           padding: 10px 13px;
-          min-width: 220px;
-          max-width: 300px;
+          width: 260px;
+          min-width: 0;
+          max-width: 260px;
+          box-sizing: border-box;
           box-shadow: 0 8px 32px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.12);
           pointer-events: none;
           animation: tooltipIn 0.12s ease;
@@ -327,22 +329,28 @@ export default function Dashboard() {
           margin-bottom: 5px;
           letter-spacing: 0.02em;
           text-transform: uppercase;
+          white-space: normal;
+          word-break: break-word;
         }
         .formula-tooltip-formula {
-          font-size: 12px;
+          font-size: 11.5px;
           font-family: 'Courier New', Courier, monospace;
           color: var(--tooltip-formula);
           background: color-mix(in srgb, var(--tooltip-formula) 10%, transparent);
           border-radius: 5px;
           padding: 5px 8px;
           margin-bottom: 6px;
-          line-height: 1.5;
+          line-height: 1.6;
+          white-space: normal;
           word-break: break-word;
+          overflow-wrap: break-word;
         }
         .formula-tooltip-desc {
           font-size: 11px;
           color: var(--tooltip-desc);
           line-height: 1.5;
+          white-space: normal;
+          word-break: break-word;
         }
 
         /* grid-noise passthrough */
