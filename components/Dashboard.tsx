@@ -1,6 +1,6 @@
 "use client"
-import { useState, useCallback, useRef } from "react"
-import { Upload, FileSpreadsheet, Download, TrendingUp, Package, Truck, Globe, Pencil, Search, X, Info } from "lucide-react"
+import { useState, useCallback, useRef, useEffect } from "react"
+import { Upload, FileSpreadsheet, Download, TrendingUp, Package, Truck, Globe, Pencil, Search, X, Info, ChevronLeft, ChevronRight, Calendar } from "lucide-react"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts"
 import type { SKUResult } from "@/lib/taager"
 import { translations, type Lang } from "@/lib/i18n"
@@ -73,6 +73,227 @@ const colFormulas: Record<string, { en: { label: string; formula: string; desc: 
   },
 }
 
+/* ─── DateRangePicker component ─── */
+type DateRange = { start: Date | null; end: Date | null }
+
+function DateRangePicker({
+  value,
+  onChange,
+  accentColor = "var(--accent)",
+  label,
+}: {
+  value: DateRange
+  onChange: (r: DateRange) => void
+  accentColor?: string
+  label: string
+}) {
+  const [open, setOpen] = useState(false)
+  const [hovered, setHovered] = useState<Date | null>(null)
+  const [viewDate, setViewDate] = useState<Date>(() => {
+    const d = new Date()
+    return new Date(d.getFullYear(), d.getMonth(), 1)
+  })
+  const [selecting, setSelecting] = useState<"start" | "end">("start")
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [])
+
+  const fmt = (d: Date | null) =>
+    d ? d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "Pick date"
+
+  const prevMonth = () => setViewDate(v => new Date(v.getFullYear(), v.getMonth() - 1, 1))
+  const nextMonth = () => setViewDate(v => new Date(v.getFullYear(), v.getMonth() + 1, 1))
+
+  const daysInMonth = (y: number, m: number) => new Date(y, m + 1, 0).getDate()
+  const firstDay = (y: number, m: number) => new Date(y, m, 1).getDay()
+
+  const year = viewDate.getFullYear()
+  const month = viewDate.getMonth()
+  const days = daysInMonth(year, month)
+  const startPad = firstDay(year, month)
+
+  const sameDay = (a: Date | null, b: Date | null) =>
+    a && b ? a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate() : false
+
+  const inRange = (d: Date) => {
+    const start = value.start
+    const end = value.end || hovered
+    if (!start || !end) return false
+    const lo = start < end ? start : end
+    const hi = start < end ? end : start
+    return d > lo && d < hi
+  }
+
+  const handleDayClick = (d: Date) => {
+    if (selecting === "start") {
+      onChange({ start: d, end: null })
+      setSelecting("end")
+    } else {
+      if (value.start && d < value.start) {
+        onChange({ start: d, end: value.start })
+      } else {
+        onChange({ start: value.start, end: d })
+      }
+      setSelecting("start")
+      setOpen(false)
+    }
+  }
+
+  const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"]
+  const DAYS_SHORT = ["Su","Mo","Tu","We","Th","Fr","Sa"]
+
+  const isStart = (d: Date) => sameDay(d, value.start)
+  const isEnd = (d: Date) => sameDay(d, value.end)
+  const isHoverEnd = (d: Date) => selecting === "end" && sameDay(d, hovered)
+
+  return (
+    <div ref={ref} style={{ position: "relative", display: "inline-block", width: "100%" }}>
+      {/* Trigger */}
+      <button
+        onClick={() => { setOpen(o => !o); setSelecting("start") }}
+        style={{
+          display: "flex", alignItems: "center", gap: 8, width: "100%",
+          background: "var(--surface)", border: "1.5px solid var(--border)",
+          borderRadius: 12, padding: "8px 12px", cursor: "pointer",
+          transition: "border-color 0.15s",
+        }}
+        onMouseEnter={e => (e.currentTarget.style.borderColor = accentColor)}
+        onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--border)")}
+      >
+        <Calendar style={{ width: 15, height: 15, color: accentColor, flexShrink: 0 }} />
+        <span style={{ fontSize: 12, fontFamily: "monospace", color: accentColor, fontWeight: 700 }}>
+          {fmt(value.start)}
+        </span>
+        <span style={{ color: "var(--muted)", fontSize: 11, margin: "0 2px" }}>→</span>
+        <span style={{ fontSize: 12, fontFamily: "monospace", color: accentColor, fontWeight: 700 }}>
+          {fmt(value.end)}
+        </span>
+      </button>
+
+      {/* Dropdown */}
+      {open && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 10000,
+          background: "var(--surface)", border: "1.5px solid var(--border)",
+          borderRadius: 16, padding: 16, boxShadow: "0 16px 48px rgba(0,0,0,0.35)",
+          minWidth: 280,
+          animation: "calFadeIn 0.12s ease",
+        }}>
+          <style>{`
+            @keyframes calFadeIn { from { opacity:0; transform:translateY(-4px) } to { opacity:1; transform:translateY(0) } }
+            .cal-day-btn { all:unset; width:34px; height:34px; display:flex; align-items:center; justify-content:center;
+              border-radius:8px; cursor:pointer; font-size:13px; font-family:monospace;
+              color:var(--text); transition:background 0.1s, color 0.1s; }
+            .cal-day-btn:hover:not([data-start]):not([data-end]) { background:color-mix(in srgb, ${accentColor} 18%, transparent); }
+            .cal-day-btn[data-inrange] { background:color-mix(in srgb, ${accentColor} 12%, transparent); border-radius:0; }
+            .cal-day-btn[data-start], .cal-day-btn[data-end] { background:${accentColor}; color:#fff; border-radius:8px; font-weight:700; }
+            .cal-day-btn[data-hover-end] { background:color-mix(in srgb, ${accentColor} 55%, transparent); color:#fff; border-radius:8px; }
+            .cal-day-btn[data-today]:not([data-start]):not([data-end]) { box-shadow:inset 0 0 0 1.5px ${accentColor}; }
+            .cal-day-btn[data-other-month] { color:var(--muted); opacity:0.45; }
+          `}</style>
+
+          {/* Month Nav */}
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
+            <button onClick={prevMonth} style={{ all:"unset", cursor:"pointer", color:"var(--muted)", padding:4, borderRadius:6, display:"flex" }}
+              onMouseEnter={e=>(e.currentTarget.style.color=accentColor)} onMouseLeave={e=>(e.currentTarget.style.color="var(--muted)")}>
+              <ChevronLeft style={{width:16,height:16}} />
+            </button>
+            <span style={{ fontFamily:"monospace", fontWeight:700, fontSize:14, color:"var(--text)" }}>
+              {MONTHS[month]} {year}
+            </span>
+            <button onClick={nextMonth} style={{ all:"unset", cursor:"pointer", color:"var(--muted)", padding:4, borderRadius:6, display:"flex" }}
+              onMouseEnter={e=>(e.currentTarget.style.color=accentColor)} onMouseLeave={e=>(e.currentTarget.style.color="var(--muted)")}>
+              <ChevronRight style={{width:16,height:16}} />
+            </button>
+          </div>
+
+          {/* Instruction */}
+          <div style={{ textAlign:"center", fontSize:10, color:"var(--muted)", marginBottom:8, letterSpacing:"0.04em", textTransform:"uppercase" }}>
+            {selecting === "start" ? "Select start date" : "Select end date"}
+          </div>
+
+          {/* Day headers */}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(7,34px)", gap:2, marginBottom:2 }}>
+            {DAYS_SHORT.map(d => (
+              <div key={d} style={{ width:34, textAlign:"center", fontSize:10, color:"var(--muted)", fontFamily:"monospace", fontWeight:600, paddingBottom:4 }}>{d}</div>
+            ))}
+          </div>
+
+          {/* Days grid */}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(7,34px)", gap:2 }}>
+            {/* padding cells */}
+            {Array.from({length: startPad}).map((_, i) => {
+              const prevDays = daysInMonth(year, month - 1)
+              const dayNum = prevDays - startPad + i + 1
+              const d = new Date(year, month - 1, dayNum)
+              return (
+                <button key={`p${i}`} className="cal-day-btn" data-other-month
+                  onClick={() => handleDayClick(d)}
+                  onMouseEnter={() => setHovered(d)}
+                  onMouseLeave={() => setHovered(null)}>
+                  {dayNum}
+                </button>
+              )
+            })}
+            {/* current month days */}
+            {Array.from({length: days}).map((_, i) => {
+              const d = new Date(year, month, i + 1)
+              const today = new Date(); const isToday = sameDay(d, today)
+              return (
+                <button key={i} className="cal-day-btn"
+                  data-start={isStart(d) ? "" : undefined}
+                  data-end={isEnd(d) ? "" : undefined}
+                  data-inrange={inRange(d) ? "" : undefined}
+                  data-hover-end={isHoverEnd(d) ? "" : undefined}
+                  data-today={isToday ? "" : undefined}
+                  onClick={() => handleDayClick(d)}
+                  onMouseEnter={() => setHovered(d)}
+                  onMouseLeave={() => setHovered(null)}>
+                  {i + 1}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Quick presets */}
+          <div style={{ marginTop:12, paddingTop:10, borderTop:"1px solid var(--border)", display:"flex", gap:6, flexWrap:"wrap" }}>
+            {[
+              { label:"This Month", fn:()=>{ const n=new Date(); return { start:new Date(n.getFullYear(),n.getMonth(),1), end:new Date(n.getFullYear(),n.getMonth()+1,0) } } },
+              { label:"Last 7d", fn:()=>{ const n=new Date(); return { start:new Date(n.getTime()-6*86400000), end:n } } },
+              { label:"Last 30d", fn:()=>{ const n=new Date(); return { start:new Date(n.getTime()-29*86400000), end:n } } },
+            ].map(p => (
+              <button key={p.label} onClick={() => { onChange(p.fn()); setOpen(false); setSelecting("start") }}
+                style={{ all:"unset", cursor:"pointer", fontSize:10, fontFamily:"monospace", fontWeight:600,
+                  padding:"3px 8px", borderRadius:6, border:`1px solid var(--border)`,
+                  color:"var(--muted)", transition:"all 0.1s" }}
+                onMouseEnter={e=>{ (e.currentTarget as HTMLElement).style.borderColor=accentColor; (e.currentTarget as HTMLElement).style.color=accentColor }}
+                onMouseLeave={e=>{ (e.currentTarget as HTMLElement).style.borderColor="var(--border)"; (e.currentTarget as HTMLElement).style.color="var(--muted)" }}>
+                {p.label}
+              </button>
+            ))}
+            {(value.start || value.end) && (
+              <button onClick={() => { onChange({start:null,end:null}); setSelecting("start") }}
+                style={{ all:"unset", cursor:"pointer", fontSize:10, fontFamily:"monospace", fontWeight:600,
+                  padding:"3px 8px", borderRadius:6, border:"1px solid var(--border)",
+                  color:"var(--muted)", marginLeft:"auto" }}
+                onMouseEnter={e=>{ (e.currentTarget as HTMLElement).style.color="var(--danger)"; (e.currentTarget as HTMLElement).style.borderColor="var(--danger)" }}
+                onMouseLeave={e=>{ (e.currentTarget as HTMLElement).style.color="var(--muted)"; (e.currentTarget as HTMLElement).style.borderColor="var(--border)" }}>
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ─── FormulaTooltip component ─── */
 function FormulaTooltip({ colKey, lang, label }: { colKey: string; lang: Lang; label: string }) {
   const [visible, setVisible] = useState(false)
@@ -130,10 +351,23 @@ export default function Dashboard() {
   const [results, setResults] = useState<SKUResult[]>([])
   const [spentValues, setSpentValues] = useState<Record<string, string>>({})
   const [productNames, setProductNames] = useState<Record<string, string>>({})
-  const [analysisDayStart, setAnalysisDayStart] = useState(1)
-  const [analysisDayEnd, setAnalysisDayEnd] = useState(9)
-  const [closedCycleDayStart, setClosedCycleDayStart] = useState(1)
-  const [closedCycleDayEnd, setClosedCycleDayEnd] = useState(5)
+  // Date-based ranges (replacing the old day-number inputs)
+  const today = new Date()
+  const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1)
+  const [analysisRange, setAnalysisRange] = useState<DateRange>({
+    start: thisMonthStart,
+    end: new Date(today.getFullYear(), today.getMonth(), 9),
+  })
+  const [closedRange, setClosedRange] = useState<DateRange>({
+    start: thisMonthStart,
+    end: new Date(today.getFullYear(), today.getMonth(), 5),
+  })
+
+  // Derived day numbers for backward-compat with taager lib
+  const analysisDayStart = analysisRange.start?.getDate() ?? 1
+  const analysisDayEnd = analysisRange.end?.getDate() ?? 9
+  const closedCycleDayStart = closedRange.start?.getDate() ?? 1
+  const closedCycleDayEnd = closedRange.end?.getDate() ?? 5
   const [skuSearch, setSkuSearch] = useState("")
   const [loading, setLoading] = useState(false)
   const [fileName, setFileName] = useState("")
@@ -208,8 +442,14 @@ export default function Dashboard() {
     ? results.filter(r => r.sku.toLowerCase().includes(skuSearch.trim().toLowerCase()))
     : results
 
-  const analysisLabel = analysisDayStart === 1 ? `1–${analysisDayEnd}` : `${analysisDayStart}–${analysisDayEnd}`
-  const closedLabel = closedCycleDayStart === 1 ? `1–${closedCycleDayEnd}` : `${closedCycleDayStart}–${closedCycleDayEnd}`
+  const fmtLabel = (r: DateRange) => {
+    if (!r.start) return "—"
+    const s = r.start.toLocaleDateString("en-GB", { day:"2-digit", month:"short" })
+    const e = r.end ? r.end.toLocaleDateString("en-GB", { day:"2-digit", month:"short" }) : "?"
+    return `${s} – ${e}`
+  }
+  const analysisLabel = fmtLabel(analysisRange)
+  const closedLabel = fmtLabel(closedRange)
   const colNdrDynamic = `NDR% ${analysisLabel}`
   const colExpNdrDynamic = `Exp.NDR% ${closedLabel}`
 
@@ -409,30 +649,22 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
             <div className="bg-surface border border-border rounded-xl px-4 py-3">
               <p className="text-muted text-xs font-medium mb-2 uppercase tracking-wide">{t.analysisRangeLabel}</p>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-mono text-sm shrink-0" style={{ color: "var(--text)" }}>{t.analysisRangeFrom}</span>
-                <input type="number" min={1} max={31} value={analysisDayStart}
-                  onChange={e => setAnalysisDayStart(Math.min(+e.target.value, analysisDayEnd))}
-                  className="w-12 bg-transparent text-accent text-lg font-mono font-bold text-center outline-none border-b-2 border-accent" />
-                <span className="text-muted font-mono text-sm shrink-0">{t.analysisRangeTo}</span>
-                <input type="number" min={1} max={31} value={analysisDayEnd}
-                  onChange={e => setAnalysisDayEnd(Math.max(+e.target.value, analysisDayStart))}
-                  className="w-12 bg-transparent text-accent text-lg font-mono font-bold text-center outline-none border-b-2 border-accent" />
-              </div>
+              <DateRangePicker
+                value={analysisRange}
+                onChange={setAnalysisRange}
+                accentColor="var(--accent)"
+                label={t.analysisRangeLabel}
+              />
             </div>
 
             <div className="bg-surface border border-border rounded-xl px-4 py-3">
               <p className="text-muted text-xs font-medium mb-2 uppercase tracking-wide">{t.closedCycleLabel}</p>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-mono text-sm shrink-0" style={{ color: "var(--text)" }}>{t.closedCycleFrom}</span>
-                <input type="number" min={1} max={31} value={closedCycleDayStart}
-                  onChange={e => setClosedCycleDayStart(Math.min(+e.target.value, closedCycleDayEnd))}
-                  className="w-12 bg-transparent text-purple-400 text-lg font-mono font-bold text-center outline-none border-b-2 border-purple-400" />
-                <span className="text-muted font-mono text-sm shrink-0">{t.closedCycleTo}</span>
-                <input type="number" min={1} max={31} value={closedCycleDayEnd}
-                  onChange={e => setClosedCycleDayEnd(Math.max(+e.target.value, closedCycleDayStart))}
-                  className="w-12 bg-transparent text-purple-400 text-lg font-mono font-bold text-center outline-none border-b-2 border-purple-400" />
-              </div>
+              <DateRangePicker
+                value={closedRange}
+                onChange={setClosedRange}
+                accentColor="#a78bfa"
+                label={t.closedCycleLabel}
+              />
             </div>
 
             {fileName && (
